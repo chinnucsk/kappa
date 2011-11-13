@@ -27,23 +27,23 @@ add_test_() ->
                     add(id, 10, ?MODULE, function1, 2))},
 
     {"error undefine function",
-      ?_assertEqual({error, {undef_function, ?MODULE, function3, 2}},
+      ?_assertError({undef_function, ?MODULE, function3, 2},
                     add(id, 10, ?MODULE, function3, 2))},
 
     {"error undefine module",
-      ?_assertEqual({error, {undef_module, dummy}},
+      ?_assertError({undef_module, dummy},
                     add(id, 10, dummy, function1, 2))},
 
     {"error duplicate function",
-      ?_assertEqual({error, {duplicate_function, id, 10, ?MODULE, function1, 2}},
+      ?_assertError({duplicate_function, id, 10, ?MODULE, function1, 2},
                     add(id, 10, ?MODULE, function1, 2))},
 
     {"error duplicate priority",
-      ?_assertEqual({error, {duplicate_priority, id, 10, ?MODULE, function2, 2}},
+      ?_assertError({duplicate_priority, id, 10, ?MODULE, function2, 2},
                     add(id, 10, ?MODULE, function2, 2))},
 
     {"error invalid_arity",
-      ?_assertEqual({error, {invalid_arity, id, 30, ?MODULE, function2, 3}},
+      ?_assertError({invalid_arity, id, 30, ?MODULE, function2, 3},
                     add(id, 30, ?MODULE, function2, 3))},
 
     {"exist add",

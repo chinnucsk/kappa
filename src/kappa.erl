@@ -62,10 +62,10 @@ stop() ->
   true = ets:delete(?TABLE),
   ok.
 
--spec add(id(), priority(), module(), function(), arity()) -> ok | {error, term()}.
+-spec add(id(), priority(), module(), function(), arity()) -> ok | no_return().
 add(Id, Priority, Module, Function, Arity) ->
-  %% まずは存在するかどうかチェック
   try
+    %% まずは存在するかどうかチェック
     ListOfTuple = apply(Module, module_info, [exports]),
     case lists:member({Function, Arity}, ListOfTuple) of
       true ->
@@ -75,12 +75,11 @@ add(Id, Priority, Module, Function, Arity) ->
           [] ->
             true = ets:insert(?TABLE, {Id, [Hook]}),
             ok;
-          %% Hook, {Priority, Module, Funciton, Arity}
           [{Id, ListOfHook}] ->
             %% まるっきり同じフックがあってはいけない
             case lists:member(Hook, ListOfHook) of
               false ->
-                %% 同じ数値があったらエラーにする同じフック Id に同じ優先度は存在してはいけない
+                %% 同じフック Id に同じ優先度は存在してはいけない
                 case lists:keymember(Priority, 1, ListOfHook) of
                   false ->
                     %% Arity が違ってはいけない
@@ -90,23 +89,23 @@ add(Id, Priority, Module, Function, Arity) ->
                         true = ets:insert(?TABLE, {Id, NewListOfHook}),
                         ok;
                       false ->
-                        {error, {invalid_arity, Id, Priority, Module, Function, Arity}}
+                        error({invalid_arity, Id, Priority, Module, Function, Arity})
                     end;
                   true ->
-                    {error, {duplicate_priority, Id, Priority, Module, Function, Arity}}
+                    error({duplicate_priority, Id, Priority, Module, Function, Arity})
                 end;
               true ->
-                {error, {duplicate_function, Id, Priority, Module, Function, Arity}}
+                error({duplicate_function, Id, Priority, Module, Function, Arity})
             end
         end;
       false ->
         %% 指定した関数が export されていない
-        {error, {undef_function, Module, Function, Arity}}
+        error({undef_function, Module, Function, Arity})
     end
   catch
     error:undef ->
       %% 指定したモジュールが定義されていない
-      {error, {undef_module, Module}}
+      error({undef_module, Module})
   end.
 
 -spec delete(id(), priority(), module(), function(), arity()) -> ok | {error, term()}.
