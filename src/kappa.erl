@@ -71,18 +71,33 @@ add(Id, Priority, Module, Function, Arity) ->
       true ->
         %% 登録へ
         Hook = {Priority, Module, Function, Arity},
-        case lists:lookup(?TABLE, Id) of
+        case ets:lookup(?TABLE, Id) of
           [] ->
             true = ets:insert(?TABLE, {Id, [Hook]}),
             ok;
           %% Hook, {Priority, Module, Funciton, Arity}
           [{Id, ListOfHook}] ->
-            %% TODO(nakai): 同じ数値があったらエラーにする同じフック Id に同じ優先度は存在してはいけない
-            %% TODO(nakai): まるっきり同じフックがあってはいけない
-            %% TODO(nakai): Arity が違ってはいけない
-            NewListOfHook = lists:merge(ListOfHook, [Hook]),
-            true = ets:insert(?TABLE, {Id, NewListOfHook}),
-            ok
+            %% まるっきり同じフックがあってはいけない
+            case lists:member(Hook, ListOfHook) of
+              false ->
+                %% 同じ数値があったらエラーにする同じフック Id に同じ優先度は存在してはいけない
+                case lists:keymember(Priority, 1, ListOfHook) of
+                  false ->
+                    %% Arity が違ってはいけない
+                    case lists:keymember(Arity, 4, ListOfHook) of
+                      true ->
+                        NewListOfHook = lists:merge(ListOfHook, [Hook]),
+                        true = ets:insert(?TABLE, {Id, NewListOfHook}),
+                        ok;
+                      false ->
+                        {error, {invalid_arity, Id, Priority, Module, Function, Arity}}
+                    end;
+                  true ->
+                    {error, {duplicate_priority, Id, Priority, Module, Function, Arity}}
+                end;
+              true ->
+                {error, {duplicate_function, Id, Priority, Module, Function, Arity}}
+            end
         end;
       false ->
         %% 指定した関数が export されていない
@@ -103,9 +118,14 @@ delete(Id, Priority, Module, Function, Arity) ->
       Hook = {Priority, Module, Function, Arity},
       case lists:member(Hook, ListOfHook) of
         true ->
-          NewListOfHook = lists:delete(Hook, ListOfHook),
-          true = ets:insert(?TABLE, {Id, NewListOfHook}),
-          ok;
+          case lists:delete(Hook, ListOfHook) of
+            [] ->
+              true = ets:delete(?TABLE, Id),
+              ok;  
+            NewListOfHook ->
+              true = ets:insert(?TABLE, {Id, NewListOfHook}),
+              ok
+          end;
         false ->
           {error, missing_hook}
       end
@@ -172,32 +192,3 @@ call0([{_Priority, Module, Function, Arity}|Rest], Args) ->
 -spec format_error(term()) -> iolist().
 format_error(_Reason) ->
   "Not implemented".
-
--ifdef(TEST).
-
-add_test_() ->
-  {setup,
-    fun() ->
-      meck:new(module),
-      meck:expect(module, function, 2, {stop, 10})
-    end,
-    fun(_) ->
-      meck:unload()
-    end,
-    [
-      {"start",
-        ?_assertEqual(ok, start())},
-      {"add",
-        ?_assertEqual(ok, add(id, 10, module, function, 2))},
-      {"error duplicate function",
-        ?_assertEqual({error, {duplicate_function, }, add())},
-      {"error duplicate priority",
-        ?_assertEqual({error, {duplicate_priority, }, add(id, module, function, ))},
-      {"error invalid_arity",
-        ?_assertEqual({error, {invalid_arity, }}, add())},
-      {"stop",
-        ?_assertEqual(ok, stop())}
-    ]
-  }.
-
--endif.
