@@ -13,7 +13,7 @@ Kappa is "Erlang Hook Application".
 
   -spec imogayu(integer(), integer(), integer()) -> {next, integer()}.
   imogayu(Value, X, Y) ->
-    {next, Value + A + 20}.
+    {next, Value + X - Y + 20}.
 
   -spec kumo(integer(), integer(), integer()) -> {stop, integer()}.
   kumo(Value, _X, _Y) ->
