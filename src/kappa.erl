@@ -73,6 +73,7 @@ add(Id, Priority, Module, Function, Arity) ->
         Hook = {Priority, Module, Function, Arity},
         case ets:lookup(?TABLE, Id) of
           [] ->
+            %% 登録がなかったらすぐ登録
             true = ets:insert(?TABLE, {Id, [Hook]}),
             ok;
           [{Id, ListOfHook}] ->
