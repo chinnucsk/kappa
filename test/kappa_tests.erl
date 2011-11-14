@@ -3,9 +3,11 @@
 -export([function1/2,
          function2/2,
          function2/3,
-         function3/2]).
+         function3/2,
+         function4/1,
+         function5/1]).
 
--import(kappa, [start/0, stop/0, add/5, call/2, call/3]).
+-import(kappa, [start/0, stop/0, add/5, delete/5, call/2, call/3]).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -20,6 +22,12 @@ function2(Value, X, Y) ->
 
 function3(Value, X) ->
   {next, Value + X}.
+
+function4(_X) ->
+  next.
+
+function5(X) ->
+  {stop, X + 10}.
 
 add_test_() ->
   [
@@ -59,7 +67,31 @@ add_test_() ->
                     stop())}
   ].
 
-call_test_() ->
+delete_test_() ->
+  [
+    {"start",
+      ?_assertEqual(ok,
+                    start())},
+    {"add",
+      ?_assertEqual(ok,
+                    add(id, 10, ?MODULE, function1, 2))},
+
+    {"add",
+      ?_assertEqual(ok,
+                    add(id, 20, ?MODULE, function2, 2))},
+    {"delete",
+      ?_assertEqual(ok,
+                    delete(id, 10, ?MODULE, function1, 2))},
+    {"delete",
+      ?_assertEqual(ok,
+                    delete(id, 20, ?MODULE, function2, 2))},
+
+    {"stop",
+      ?_assertEqual(ok,
+                    stop())}
+  ].
+
+call3_test_() ->
   [
     {"start",
       ?_assertEqual(ok,
@@ -67,15 +99,15 @@ call_test_() ->
     {"no add",
       ?_assertEqual({ok, 0},
                     call(id, 0, [10]))},
-    {"add function1/2",
-      ?_assertEqual(ok,
-                    add(id, 20, ?MODULE, function1, 2))},
-    {"",
-      ?_assertEqual({ok, 10},
-                    call(id, 0, [10]))},
     {"add function3/2",
       ?_assertEqual(ok,
                     add(id, 10, ?MODULE, function3, 2))},
+    {"",
+      ?_assertEqual({ok, 10},
+                    call(id, 0, [10]))},
+    {"add function1/2",
+      ?_assertEqual(ok,
+                    add(id, 20, ?MODULE, function1, 2))},
     {"",
       ?_assertEqual({ok, 20},
                     call(id, 0, [10]))},
@@ -83,3 +115,29 @@ call_test_() ->
       ?_assertEqual(ok,
                     stop())}
   ].
+
+call2_test_() ->
+  [
+    {"start",
+      ?_assertEqual(ok,
+                    start())},
+    {"no add",
+      ?_assertEqual(ok,
+                    call(id, [10]))},
+    {"add function4/1",
+      ?_assertEqual(ok,
+                    add(id, 20, ?MODULE, function4, 1))},
+    {"",
+      ?_assertEqual(ok,
+                    call(id, [10]))},
+    {"add function5/1",
+      ?_assertEqual(ok,
+                    add(id, 10, ?MODULE, function5, 1))},
+    {"",
+      ?_assertEqual({ok, 20},
+                    call(id, [10]))},
+    {"stop",
+      ?_assertEqual(ok,
+                    stop())}
+  ].
+
