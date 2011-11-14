@@ -5,7 +5,9 @@
          function2/3,
          function3/2,
          function4/1,
-         function5/1]).
+         function5/1,
+         function6/1,
+         function7/2]).
 
 -import(kappa, [start/0, stop/0, add/5, delete/5, call/2, call/3]).
 
@@ -28,6 +30,12 @@ function4(_X) ->
 
 function5(X) ->
   {stop, X + 10}.
+
+function6(_X) ->
+  ok.
+
+function7(_Value, _X) ->
+  ok.
 
 add_test_() ->
   [
@@ -111,6 +119,18 @@ call3_test_() ->
     {"",
       ?_assertEqual({ok, 20},
                     call(id, 0, [10]))},
+
+    {"add function6/1",
+      ?_assertEqual(ok,
+                    add(error, 10, ?MODULE, function7, 2))},
+
+    {"error invalid_apply",
+      ?_assertError({invalid_apply, ?MODULE, function7, 2, 0, [10], {case_clause, ok}},
+                    call(error, 0, [10]))},
+
+    {"error invalid_apply",
+      ?_assertError({invalid_apply, ?MODULE, function7, 2, 0, [10, 20], undef},
+                    call(error, 0, [10, 20]))},
     {"stop",
       ?_assertEqual(ok,
                     stop())}
@@ -136,6 +156,19 @@ call2_test_() ->
     {"",
       ?_assertEqual({ok, 20},
                     call(id, [10]))},
+
+    {"add function6/1",
+      ?_assertEqual(ok,
+                    add(error, 10, ?MODULE, function6, 1))},
+
+    {"error invalid_apply",
+      ?_assertError({invalid_apply, ?MODULE, function6, 1, [10], {case_clause, ok}},
+                    call(error, [10]))},
+
+    {"error invalid_apply",
+      ?_assertError({invalid_apply, ?MODULE, function6, 1, [10, 20], undef},
+                    call(error, [10, 20]))},
+
     {"stop",
       ?_assertEqual(ok,
                     stop())}

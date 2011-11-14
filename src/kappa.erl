@@ -49,6 +49,10 @@ stop() ->
   true = ets:delete(?TABLE),
   ok.
 
+%% -spec info(id()) -> [{priority(), module(), function(), arity()}].
+%% info(Id) ->
+%%   ets:lookup(?TABLE, Id).
+
 -spec add(id(), priority(), module(), function(), arity()) -> ok | no_return().
 add(Id, Priority, Module, Function, Arity) ->
   try
@@ -118,7 +122,7 @@ delete(Id, Priority, Module, Function, Arity) ->
       end
   end.
 
--spec call(id(), value(), args()) -> {ok, value()} | {error, term()}.
+-spec call(id(), value(), args()) -> {ok, value()} | no_return().
 call(Id, Value, Args) ->
   case ets:lookup(?TABLE, Id) of
     [] ->
@@ -128,7 +132,7 @@ call(Id, Value, Args) ->
       call0(ListOfHook, Value, Args)
   end.
 
--spec call0([{priority(), module(), fun(), arity()}], value(), args()) -> {ok, value()} | {error, term()}.
+-spec call0([{priority(), module(), function(), arity()}], value(), args()) -> {ok, value()} | no_return().
 call0([], Value, _Args) ->
   {ok, Value};
 call0([{_, Module, Function, Arity}|Rest], Value, Args) ->
@@ -137,17 +141,15 @@ call0([{_, Module, Function, Arity}|Rest], Value, Args) ->
       {next, NewValue} ->
         call0(Rest, NewValue, Args);
       {stop, NewValue} ->
-        {ok, NewValue};
-      _ ->
-        {error, invalid_args}
+        {ok, NewValue}
     end
   catch
-    _:_ ->
+    _Class:Reason ->
       %% apply に失敗
-      {error, {invalid, Module, Function, Arity, Value, Args}}
+      error({invalid_apply, Module, Function, Arity, Value, Args, Reason})
   end.
   
--spec call(id(), args()) -> ok | {ok, term()} | {error, term()}.
+-spec call(id(), args()) -> ok | {ok, term()} | no_return().
 call(Id, Args) when is_list(Args) ->
   case ets:lookup(?TABLE, Id) of
     [] ->
@@ -157,7 +159,7 @@ call(Id, Args) when is_list(Args) ->
       call0(ListOfHook, Args)
   end.
 
--spec call0([{priority(), module(), fun(), arity()}], args()) -> ok | {ok, value()} | {error, term()}.
+-spec call0([{priority(), module(), function(), arity()}], args()) -> ok | {ok, value()} | no_return(). 
 call0([], _Args) ->
   ok;
 call0([{_Priority, Module, Function, Arity}|Rest], Args) ->
@@ -166,14 +168,12 @@ call0([{_Priority, Module, Function, Arity}|Rest], Args) ->
       next ->
         call0(Rest, Args);
       {stop, NewValue} ->
-        {ok, NewValue};
-      _ ->
-        {error, invalid_args}
+        {ok, NewValue}
     end
   catch
-    _:_ ->
+    _Class:Reason ->
       %% apply に失敗
-      {error, {invalid, Module, Function, Arity, Args}}
+      error({invalid_apply, Module, Function, Arity, Args, Reason})
   end.
 
 -spec format_error(term()) -> iolist().
