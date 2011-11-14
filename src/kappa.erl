@@ -26,16 +26,22 @@
 
 %% TODO(nakai): call0 の名前を変更する
 
-%% フックを new するもありか引数を指定できる感じで kappa:new(atom(), arity()).
+%% 2.0 では -kappa(spam, 2). みたいに登録できるようにする
 
 %% 登録/削除は register/unregister ってのもありか
 %% 呼び出しは call? apply? fold?
 %% {next, any()} と next; {stop, any()};
 
--spec start() -> ok.
+-spec start() -> ok | {error, {already_started, kappa}}.
 start() ->
-  _Tid = ets:new(?TABLE, [set, public, named_table, {read_concurrency, true}]),
-  ok.
+  case lists:member(?TABLE, ets:all()) of
+    true ->
+      {error, {already_started, kappa}};
+    false ->
+      _Tid = ets:new(?TABLE,
+                     [set, public, named_table, {read_concurrency, true}]),
+      ok
+  end.
 
 -spec stop() -> ok.
 stop() ->
