@@ -13,6 +13,10 @@
 
 -export([format_error/1]).
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 -define(TABLE, kappa_table).
 
 -type id() :: atom().
@@ -28,32 +32,9 @@
 %% 呼び出しは call? apply? fold?
 %% {next, any()} と next; {stop, any()};
 
-%% サンプル
-%% main() ->
-%%   ok = kappa:add(spam, 5, spam, ham, 4),
-%%   ok = kappa:add(spam, 10, spam, bacon, 4),
-%%   case kappa:call(spam, 0, [1,2,3]) of
-%%     {ok, Sum} ->
-%%       %% どこかで止められた
-%%       %% もどりがエラーだとしてもなんだとしても ok で返ってくる
-%%       %% {ok, Respond}, {ok, 404}, {ok, {error, spam}} ... 気持ち悪いけどそんなイメージ
-%%     {error, term()} ->
-%%       %% エラー
-%%       ...
-%%   end.
-%% 
-%% -spec ham(integer(), integer(), integer()) -> {next, integer()}.
-%% ham(Sum, A, B, C) ->
-%%   {next, Sum + A + B + C}.
-%% 
-%% -spec bacon(integer(), integer(), integer()) -> {stop, integer()}.
-%% bacon(Sum, A, B, C) ->
-%%   {ok, Sum + A}.
-
 -spec start() -> ok.
 start() ->
-  %% TODO(nakai): write/read concurrency を適用するか検討する
-  _Tid = ets:new(?TABLE, [set, public, named_table]),
+  _Tid = ets:new(?TABLE, [set, public, named_table, {read_concurrency, true}]),
   ok.
 
 -spec stop() -> ok.
@@ -135,8 +116,8 @@ delete(Id, Priority, Module, Function, Arity) ->
 call(Id, Value, Args) ->
   case ets:lookup(?TABLE, Id) of
     [] ->
-      %% フックが存在しない
-      {error, invalid_call};
+      %% フックが存在しない場合はそのまま返す
+      {ok, Value};
     [{Id, ListOfHook}] ->
       call0(ListOfHook, Value, Args)
   end.
@@ -147,10 +128,10 @@ call0([], Value, _Args) ->
 call0([{_, Module, Function, Arity}|Rest], Value, Args) ->
   try
     case apply(Module, Function, [Value|Args]) of
-      {next, Value} ->
-        call0(Rest, Value, Args);
-      {stop, Value} ->
-        {ok, Value};
+      {next, NewValue} ->
+        call0(Rest, NewValue, Args);
+      {stop, NewValue} ->
+        {ok, NewValue};
       _ ->
         {error, invalid_args}
     end
@@ -165,7 +146,7 @@ call(Id, Args) when is_list(Args) ->
   case ets:lookup(?TABLE, Id) of
     [] ->
       %% フック が存在しない
-      {eror, missing_id};
+      ok;
     [{Id, ListOfHook}] ->
       call0(ListOfHook, Args)
   end.
@@ -178,8 +159,8 @@ call0([{_Priority, Module, Function, Arity}|Rest], Args) ->
     case apply(Module, Function, Args) of
       next ->
         call0(Rest, Args);
-      {stop, Value} ->
-        {ok, Value};
+      {stop, NewValue} ->
+        {ok, NewValue};
       _ ->
         {error, invalid_args}
     end
