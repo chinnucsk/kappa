@@ -1,0 +1,12 @@
+{application, kappa,
+ [
+  {description, ""},
+  {vsn, "0.2.0"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { kappa_app, []}},
+  {env, []}
+ ]}.
