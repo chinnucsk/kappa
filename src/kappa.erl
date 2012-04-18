@@ -13,10 +13,6 @@
 
 -export([format_error/1]).
 
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
--endif.
-
 -define(TABLE, kappa_table).
 
 -type id() :: atom().
@@ -125,14 +121,20 @@ delete(Id, Priority, Module, Function, Arity) ->
             end
     end.
 
--spec call(id(), value(), args()) -> {ok, value()} | no_return().
+-spec call(id(), value(), args()) -> ok | {ok, value()} | no_return().
 call(Id, Value, Args) ->
     case ets:lookup(?TABLE, Id) of
         [] ->
-            %% フックが存在しない場合はそのまま返す
-            {ok, Value};
+            %% フックが存在しない場合は ok を返す
+            ok;
         [{Id, ListOfHook}] ->
-            call0(ListOfHook, Value, Args)
+            case call0(ListOfHook, Value, Args) of
+                {ok, Value} ->
+                    %% 入れたのと同一のデータの場合は ok のみ返す
+                    ok;
+                {ok, NewValue} ->
+                    {ok, NewValue}
+            end
     end.
 
 -spec call0([{priority(), module(), function(), arity()}], value(), args()) -> {ok, value()} | no_return().
