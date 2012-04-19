@@ -1,3 +1,5 @@
+.PHONY: test
+
 all:
 	@./rebar update-deps
 	@./rebar get-deps
@@ -11,7 +13,7 @@ compile:
 xref:
 	@./rebar xref skip_deps=true
 
-eunit:
+test:
 	@./rebar eunit skip_deps=true
 
 clean:

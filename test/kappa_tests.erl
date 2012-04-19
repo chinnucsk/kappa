@@ -1,179 +1,321 @@
 -module(kappa_tests).
 
--export([function1/2,
-         function2/2,
-         function2/3,
-         function3/2,
-         function4/1,
-         function5/1,
-         function6/1,
-         function7/2]).
-
--import(kappa, [start/0, stop/0, add/5, delete/5, call/2, call/3]).
+-import(kappa, [start/0, stop/0, add/4, delete/4, declare/3, all/2, only/2, every/3]).
 
 -include_lib("eunit/include/eunit.hrl").
 
-function1(Value, X) ->
-  {stop, Value + X}.
+application_test_() ->
+    [
+        {"start",
+            fun() ->
+                ?assertEqual(ok,
+                             application:start(kappa)),
+                ?assertEqual(ok,
+                             application:stop(kappa))
+            end}
+    ].
 
-function2(Value, X) ->
-  {stop, Value - X}.
-
-function2(Value, X, Y) ->
-  {stop, Value, X, Y}.
-
-function3(Value, X) ->
-  {next, Value + X}.
-
-function4(_X) ->
-  next.
-
-function5(X) ->
-  {stop, X + 10}.
-
-function6(_X) ->
-  ok.
-
-function7(_Value, _X) ->
-  ok.
+declare_test_() ->
+    [
+        {"start",
+         ?_assertEqual(ok,
+                       start())},
+        {"start",
+         ?_assertEqual({error, {already_started, kappa}},
+                       start())},
+        {"register: spam only 1",
+         ?_assertEqual(ok,
+                       declare(spam, only, 1))},
+        {"register: spam only 1",
+         ?_assertError({duplicate_name, spam},
+                       declare(spam, only, 1))},
+        {"register: spam every 2",
+         ?_assertError({duplicate_name, spam},
+                       declare(spam, every, 2))},
+        {"stop",
+         ?_assertEqual(ok,
+                       stop())}
+    ].
 
 add_test_() ->
-  [
-    {"start",
-      ?_assertEqual(ok,
-                    start())},
-    {"start",
-      ?_assertEqual({error, {already_started, kappa}},
-                    start())},
-    {"add",
-      ?_assertEqual(ok,
-                    add(id, 10, ?MODULE, function1, 2))},
+    {setup,
+        fun() ->
+            meck:new(dummy),
+            meck:expect(dummy, function1, fun(X) -> X + 10 end),
+            meck:expect(dummy, function2, fun(X) -> X + 20 end),
+            meck:expect(dummy, function3, fun(X, Y) -> X + Y + 10 end)
+        end,
+        fun(_) ->
+            meck:unload()
+        end,
+        [
+            {"start",
+             ?_assertEqual(ok,
+                           start())},
+            {"start",
+             ?_assertEqual({error, {already_started, kappa}},
+                           start())},
+            {"error not declare spam only 1",
+             ?_assertError({missing_declare, spam},
+                           add(spam, only, 10, {dummy, function1, 1}))},
+            {"register: spam only 1",
+             ?_assertEqual(ok,
+                           declare(spam, only, 1))},
+            {"add",
+             ?_assertEqual(ok,
+                           add(spam, only, 10, {dummy, function1, 1}))},
+            {"add",
+             ?_assertEqual(ok,
+                 catch add(spam, only, 20, {dummy, function2, 1}))},
 
-    {"error undefine function",
-      ?_assertError({undef_function, ?MODULE, function3, 3},
-                    add(id, 10, ?MODULE, function3, 3))},
+            {"error undefine function",
+             ?_assertError({undef_function, dummy, function4, 1},
+                           add(spam, only, 20, {dummy, function4, 1}))},
 
-    {"error undefine module",
-      ?_assertError({undef_module, dummy},
-                    add(id, 10, dummy, function1, 2))},
+            {"error undefine module",
+                ?_assertError({undef_module, dummy1},
+                           add(spam, only, 10, {dummy1, function1, 1}))},
 
-    {"error duplicate function",
-      ?_assertError({duplicate_function, id, 10, ?MODULE, function1, 2},
-                    add(id, 10, ?MODULE, function1, 2))},
+            {"error invalid type",
+                ?_assertError({invalid_type, spam, all, {30, {dummy, function2, 1}}},
+                           add(spam, all, 30, {dummy, function2, 1}))},
 
-    {"error duplicate priority",
-      ?_assertError({duplicate_priority, id, 10, ?MODULE, function2, 2},
-                    add(id, 10, ?MODULE, function2, 2))},
+            {"error invalid arity",
+                ?_assertError({invalid_arity, spam, only, {30, {dummy, function3, 2}}},
+                           add(spam, only, 30, {dummy, function3, 2}))},
 
-    {"error invalid_arity",
-      ?_assertError({invalid_arity, id, 30, ?MODULE, function2, 3},
-                    add(id, 30, ?MODULE, function2, 3))},
+            {"error duplicate mfa",
+                ?_assertError({duplicate_mfa, spam, only, {30, {dummy, function1, 1}}},
+                           add(spam, only, 30, {dummy, function1, 1}))},
 
-    {"add",
-      ?_assertEqual(ok,
-                    add(id, 20, ?MODULE, function2, 2))},
+            {"error duplicate priority",
+                ?_assertError({duplicate_priority, spam, only, {10, {dummy, function2, 1}}},
+                           add(spam, only, 10, {dummy, function2, 1}))},
 
-    {"stop",
-      ?_assertEqual(ok,
-                    stop())}
-  ].
+            {"stop",
+             ?_assertEqual(ok,
+                           stop())}
+        ]
+    }.
 
 delete_test_() ->
-  [
-    {"start",
-      ?_assertEqual(ok,
-                    start())},
-    {"add",
-      ?_assertEqual(ok,
-                    add(id, 10, ?MODULE, function1, 2))},
+    {setup,
+        fun() ->
+            meck:new(dummy),
+            meck:expect(dummy, function1, fun(X) -> X + 10 end),
+            meck:expect(dummy, function2, fun(X) -> X + 10 end)
+        end,
+        fun(_) ->
+            meck:unload()
+        end,
+        [
+            {"start",
+                ?_assertEqual(ok,
+                              start())},
+            {"missing spam",
+                ?_assertError({missing_declare, spam},
+                              delete(spam, only, 10, {dummy, function1, 1}))},
 
-    {"add",
-      ?_assertEqual(ok,
-                    add(id, 20, ?MODULE, function2, 2))},
-    {"delete",
-      ?_assertEqual(ok,
-                    delete(id, 10, ?MODULE, function1, 2))},
-    {"delete",
-      ?_assertEqual(ok,
-                    delete(id, 20, ?MODULE, function2, 2))},
+            {"register: spam only 1",
+                ?_assertEqual(ok,
+                              declare(spam, only, 1))},
 
-    {"stop",
-      ?_assertEqual(ok,
-                    stop())}
-  ].
+            {"add",
+                ?_assertEqual(ok,
+                              add(spam, only, 10, {dummy, function1, 1}))},
 
-call3_test_() ->
-  [
-    {"start",
-      ?_assertEqual(ok,
-                    start())},
-    {"no add",
-      ?_assertEqual({ok, 0},
-                    call(id, 0, [10]))},
-    {"add function3/2",
-      ?_assertEqual(ok,
-                    add(id, 10, ?MODULE, function3, 2))},
-    {"",
-      ?_assertEqual({ok, 10},
-                    call(id, 0, [10]))},
-    {"add function1/2",
-      ?_assertEqual(ok,
-                    add(id, 20, ?MODULE, function1, 2))},
-    {"",
-      ?_assertEqual({ok, 20},
-                    call(id, 0, [10]))},
+            {"add",
+                ?_assertEqual(ok,
+                              add(spam, only, 20, {dummy, function2, 1}))},
+            {"delete",
+                ?_assertError({missing_hook, {10, {dummy, function3, 1}}},
+                              delete(spam, only, 10, {dummy, function3, 1}))},
+            {"delete",
+                ?_assertEqual(ok,
+                              delete(spam, only, 10, {dummy, function1, 1}))},
+            {"delete",
+                ?_assertEqual(ok,
+                              delete(spam, only, 20, {dummy, function2, 1}))},
+            {"stop",
+                ?_assertEqual(ok,
+                              stop())}
+        ]
+    }.
 
-    {"add function6/1",
-      ?_assertEqual(ok,
-                    add(error, 10, ?MODULE, function7, 2))},
+only_test_() ->
+    {setup,
+        fun() ->
+            meck:new(dummy),
+            meck:expect(dummy, function1, fun(X) -> X + 10 end),
+            meck:expect(dummy, function2, fun(X) -> X + 20 end),
+            meck:expect(dummy, function3, fun(X, Y) -> X + Y + 10 end),
+            meck:expect(dummy, function4, fun(_X) -> next end)
+        end,
+        fun(_) ->
+            meck:unload()
+        end,
+        [
+            {"start",
+                ?_assertEqual(ok,
+                              start())},
+            {"missing declare",
+                ?_assertError({missing_declare, spam},
+                              only(spam, [10]))},
+            {"declare: spam only 1",
+                ?_assertEqual(ok,
+                              declare(spam, only, 1))},
+            {"no add",
+                ?_assertEqual(not_found,
+                              only(spam, [10]))},
+            {"add function4/1",
+                ?_assertEqual(ok,
+                              add(spam, only, 10, {dummy, function4, 1}))},
+            {"no catch function",
+                ?_assertEqual(not_found,
+                              only(spam, [10]))},
+            {"add function1/1",
+                ?_assertEqual(ok,
+                              add(spam, only, 20, {dummy, function1, 1}))},
+            {"add + 0",
+                ?_assertEqual(10,
+                              only(spam, [0]))},
+            {"add + 10",
+                ?_assertEqual(20,
+                              only(spam, [10]))},
+            {"add function1/2",
+                ?_assertEqual(ok,
+                              add(spam, only, 30, {dummy, function2, 1}))},
+            {"",
+                ?_assertEqual(20,
+                              only(spam, [10]))},
+            {"error invalid_apply",
+                ?_assertError({invalid_apply, {dummy, function4, 1}},
+                              only(spam, [a]))},
 
-    {"error invalid_apply",
-      ?_assertError({invalid_apply, ?MODULE, function7, 2, 0, [10], {case_clause, ok}},
-                    call(error, 0, [10]))},
+            {"error invalid_apply",
+                ?_assertError({invalid_apply, {dummy, function4, 1}},
+                              only(spam, [10, 20]))},
+            {"stop",
+                ?_assertEqual(ok,
+                              stop())}
+        ]
+    }.
 
-    {"error invalid_apply",
-      ?_assertError({invalid_apply, ?MODULE, function7, 2, 0, [10, 20], undef},
-                    call(error, 0, [10, 20]))},
-    {"stop",
-      ?_assertEqual(ok,
-                    stop())}
-  ].
+all_test_() ->
+    {setup,
+        fun() ->
+            meck:new(dummy),
+            meck:expect(dummy, function1, fun(X) -> X + 10 end),
+            meck:expect(dummy, function2, fun(X) -> X + 20 end),
+            meck:expect(dummy, function3, fun(X, Y) -> X + Y + 10 end),
+            meck:expect(dummy, function4, fun(X) -> X + 30 end)
+        end,
+        fun(_) ->
+            meck:unload()
+        end,
+        [
+            {"start",
+                ?_assertEqual(ok,
+                              start())},
+            {"missing declare",
+                ?_assertError({missing_declare, spam},
+                              all(spam, [10]))},
+            {"declare: spam all 1",
+                ?_assertEqual(ok,
+                              declare(spam, all, 1))},
+            {"no add",
+                ?_assertEqual([],
+                              all(spam, [10]))},
+            {"add function4/1",
+                ?_assertEqual(ok,
+                              add(spam, all, 10, {dummy, function4, 1}))},
+            {"no catch function",
+                ?_assertEqual([40],
+                              all(spam, [10]))},
+            {"add function1/1",
+                ?_assertEqual(ok,
+                              add(spam, all, 20, {dummy, function1, 1}))},
+            {"add + 0",
+                ?_assertEqual([30, 10],
+                              all(spam, [0]))},
+            {"add + 10",
+                ?_assertEqual([40, 20],
+                              all(spam, [10]))},
+            {"add function1/2",
+                ?_assertEqual(ok,
+                              add(spam, all, 30, {dummy, function2, 1}))},
+            {"",
+                ?_assertEqual([40,20,30],
+                              all(spam, [10]))},
+            {"error invalid_apply",
+                ?_assertError({invalid_apply, {dummy, function4, 1}},
+                              all(spam, [a]))},
 
-call2_test_() ->
-  [
-    {"start",
-      ?_assertEqual(ok,
-                    start())},
-    {"no add",
-      ?_assertEqual(ok,
-                    call(id, [10]))},
-    {"add function4/1",
-      ?_assertEqual(ok,
-                    add(id, 20, ?MODULE, function4, 1))},
-    {"",
-      ?_assertEqual(ok,
-                    call(id, [10]))},
-    {"add function5/1",
-      ?_assertEqual(ok,
-                    add(id, 10, ?MODULE, function5, 1))},
-    {"",
-      ?_assertEqual({ok, 20},
-                    call(id, [10]))},
+            {"error invalid_apply",
+                ?_assertError({invalid_apply, {dummy, function4, 1}},
+                              all(spam, [10, 20]))},
+            {"stop",
+                ?_assertEqual(ok,
+                              stop())}
+        ]
+    }.
 
-    {"add function6/1",
-      ?_assertEqual(ok,
-                    add(error, 10, ?MODULE, function6, 1))},
 
-    {"error invalid_apply",
-      ?_assertError({invalid_apply, ?MODULE, function6, 1, [10], {case_clause, ok}},
-                    call(error, [10]))},
+every_test_() ->
+    {setup,
+        fun() ->
+            meck:new(dummy),
+            meck:expect(dummy, function1, fun(Acc, X) -> Acc + X + 10 end),
+            meck:expect(dummy, function2, fun(Acc, X) -> Acc + X + 20 end),
+            meck:expect(dummy, function3, fun(Acc, X) -> Acc + X + 30 end)
+        end,
+        fun(_) ->
+            meck:unload()
+        end,
+        [
+            {"start",
+                ?_assertEqual(ok,
+                              start())},
+            {"missing declare",
+                ?_assertError({missing_declare, spam},
+                              every(spam, 0, [10]))},
+            {"declare: spam every 2",
+                ?_assertEqual(ok,
+                              declare(spam, every, 2))},
+            {"no add",
+                ?_assertEqual(0,
+                              every(spam, 0, [10]))},
+            {"add function4/1",
+                ?_assertEqual(ok,
+                              add(spam, every, 10, {dummy, function1, 2}))},
+            {"10 + 10 + 10",
+                ?_assertEqual(30,
+                              every(spam, 10, [10]))},
+            {"add function1/1",
+                ?_assertEqual(ok,
+                              add(spam, every, 20, {dummy, function2, 2}))},
+            {"add + 0",
+                ?_assertEqual(50,
+                              every(spam, 20, [0]))},
+            {"add + 10",
+                ?_assertEqual(80,
+                              every(spam, 30, [10]))},
+            {"add function1/2",
+                ?_assertEqual(ok,
+                              add(spam, every, 30, {dummy, function3, 2}))},
+            {"",
+                ?_assertEqual(90,
+                              every(spam, 0, [10]))},
+            {"error invalid_apply",
+                ?_assertError({invalid_apply, {dummy, function1, 2}},
+                              every(spam, 0, [a]))},
 
-    {"error invalid_apply",
-      ?_assertError({invalid_apply, ?MODULE, function6, 1, [10, 20], undef},
-                    call(error, [10, 20]))},
-
-    {"stop",
-      ?_assertEqual(ok,
-                    stop())}
-  ].
+            {"error invalid_apply",
+                ?_assertError({invalid_apply, {dummy, function1, 2}},
+                              every(spam, 0, [10, 20]))},
+            {"stop",
+                ?_assertEqual(ok,
+                              stop())}
+        ]
+    }.
 

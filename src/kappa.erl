@@ -2,180 +2,184 @@
 
 -author('twisted.mind@voluntas.net').
 
--export([start/0,
-         stop/0]).
-
--export([add/5,
-         delete/5]).
-
--export([call/2,
-         call/3]).
-
--export([format_error/1]).
-
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
--endif.
+-export([start/0, stop/0]).
+-export([declare/3]).
+-export([add/4, delete/4]).
+-export([all/2, only/2, every/3]).  
 
 -define(TABLE, kappa_table).
 
--type id() :: atom().
+-include_lib("eunit/include/eunit.hrl").
+
 -type priority() :: non_neg_integer().
 -type args() :: [any()].
 -type value() :: any().
 
-%% TODO(nakai): call0 の名前を変更する
+-type name() :: atom().
+-type type() :: all | only | every.
 
-%% 2.0 では -kappa(spam, 2). みたいに登録できるようにする
-
-%% 登録/削除は register/unregister ってのもありか
-%% 呼び出しは call? apply? fold?
-%% {next, any()} と next; {stop, any()};
+%% all, only, every
+%% all はフックポイントに登録してある全ての関数から価を貰って最後に lists:append() して値を戻す
+%% only はフックポイントに登録してある関数を優先順位順に見ていって、途中で止められた関数の値を返す
+%% every は全ての値で共通の値を処理された値を返す、途中で止めることは出来ない
 
 -spec start() -> ok | {error, {already_started, kappa}}.
 start() ->
-  case lists:member(?TABLE, ets:all()) of
-    true ->
-      {error, {already_started, kappa}};
-    false ->
-      _Tid = ets:new(?TABLE,
-                     [set, public, named_table, {read_concurrency, true}]),
-      ok
-  end.
+    case lists:member(?TABLE, ets:all()) of
+        true ->
+            {error, {already_started, kappa}};
+        false ->
+            _Tid = ets:new(?TABLE,
+                           [set, public, named_table, {read_concurrency, true}]),
+            ok
+    end.
 
 -spec stop() -> ok.
 stop() ->
-  %% テーブルの削除
-  true = ets:delete(?TABLE),
-  ok.
+    %% テーブルの削除
+    true = ets:delete(?TABLE),
+    ok.
 
-%% -spec info(id()) -> [{priority(), module(), function(), arity()}].
-%% info(Id) ->
-%%   ets:lookup(?TABLE, Id).
-
--spec add(id(), priority(), module(), function(), arity()) -> ok | no_return().
-add(Id, Priority, Module, Function, Arity) ->
-  try
-    %% まずは存在するかどうかチェック
-    ListOfTuple = apply(Module, module_info, [exports]),
-    case lists:member({Function, Arity}, ListOfTuple) of
-      true ->
-        %% 登録へ
-        Hook = {Priority, Module, Function, Arity},
-        case ets:lookup(?TABLE, Id) of
-          [] ->
-            %% 登録がなかったらすぐ登録
-            true = ets:insert(?TABLE, {Id, [Hook]}),
+-spec declare(atom(), type(), arity()) -> ok.
+declare(Name, Type, Arity) ->
+    case ets:lookup(?TABLE, Name) of
+        [] ->
+            true = ets:insert(?TABLE, {Name, Type, Arity, []}),
             ok;
-          [{Id, ListOfHook}] ->
-            %% まるっきり同じフックがあってはいけない
-            case lists:member(Hook, ListOfHook) of
-              false ->
-                %% 同じフック Id に同じ優先度は存在してはいけない
-                case lists:keymember(Priority, 1, ListOfHook) of
-                  false ->
-                    %% Arity が違ってはいけない
-                    case lists:keymember(Arity, 4, ListOfHook) of
-                      true ->
-                        NewListOfHook = lists:merge(ListOfHook, [Hook]),
-                        true = ets:insert(?TABLE, {Id, NewListOfHook}),
-                        ok;
-                      false ->
-                        error({invalid_arity, Id, Priority, Module, Function, Arity})
-                    end;
-                  true ->
-                    error({duplicate_priority, Id, Priority, Module, Function, Arity})
+        _ ->
+            error({duplicate_name, Name})
+    end.
+
+-spec add(name(), type(), priority(), mfa()) -> ok | no_return().
+add(Name, Type, Priority, {Module, Function, Arity}) ->
+    try
+        %% まずは存在するかどうかチェック
+        ListOfTuple = apply(Module, module_info, [exports]),
+        case lists:member({Function, Arity}, ListOfTuple) of
+            true ->
+                Hook = {Priority, {Module, Function, Arity}},
+                case ets:lookup(?TABLE, Name) of
+                    [] ->
+                        %% Hook が宣言されていなかったら例外を上げる
+                        error({missing_declare, Name});
+                    [{Name, Type, Arity, ListOfHook}] ->
+                        verify_add(Name, Type, Arity, ListOfHook, Hook);
+                    [{_Name, _Type, Arity, _ListOfHook}] ->
+                        %% _Type は正しい値が入ってくる
+                        error({invalid_type, Name, Type, Hook});
+                    [{_Name, Type, _Arity, _ListOfHook}] ->
+                        %% _Arity は正しい値が入ってくる
+                        error({invalid_arity, Name, Type, Hook})
                 end;
-              true ->
-                error({duplicate_function, Id, Priority, Module, Function, Arity})
-            end
-        end;
-      false ->
-        %% 指定した関数が export されていない
-        error({undef_function, Module, Function, Arity})
-    end
-  catch
-    error:undef ->
-      %% 指定したモジュールが定義されていない
-      error({undef_module, Module})
-  end.
+            false ->
+                %% 指定した関数が export されていない
+                error({undef_function, Module, Function, Arity})
+        end
+    catch
+        error:undef ->
+            %% 指定したモジュールが定義されていない
+            error({undef_module, Module})
+    end.
 
--spec delete(id(), priority(), module(), function(), arity()) -> ok | {error, term()}.
-delete(Id, Priority, Module, Function, Arity) ->
-  case ets:lookup(?TABLE, Id) of
-    [] ->
-      {error, missing_id};
-    [{Id, ListOfHook}] ->
-      Hook = {Priority, Module, Function, Arity},
-      case lists:member(Hook, ListOfHook) of
-        true ->
-          case lists:delete(Hook, ListOfHook) of
-            [] ->
-              true = ets:delete(?TABLE, Id),
-              ok;  
-            NewListOfHook ->
-              true = ets:insert(?TABLE, {Id, NewListOfHook}),
-              ok
-          end;
+verify_add(Name, Type, Arity, ListOfHook, {Priority, MFA} = Hook) ->
+    %% 同じ優先度は存在してはいけない
+    case lists:keymember(Priority, 1, ListOfHook) of
         false ->
-          {error, missing_hook}
-      end
-  end.
+            %% 同じ M:F/A があってはいけない (Priority は無視する)
+            case lists:keymember(MFA, 2, ListOfHook) of
+                false ->
+                    NewListOfHook = lists:merge(ListOfHook, [Hook]),
+                    true = ets:insert(?TABLE, {Name, Type, Arity, NewListOfHook}),
+                    ok;
+                true ->
+                    error({duplicate_mfa, Name, Type, Hook})
+            end;
+        true ->
+            error({duplicate_priority, Name, Type, Hook})
+    end.
 
--spec call(id(), value(), args()) -> {ok, value()} | no_return().
-call(Id, Value, Args) ->
-  case ets:lookup(?TABLE, Id) of
-    [] ->
-      %% フックが存在しない場合はそのまま返す
-      {ok, Value};
-    [{Id, ListOfHook}] ->
-      call0(ListOfHook, Value, Args)
-  end.
+-spec delete(name(), type(), priority(), mfa()) -> ok.
+delete(Name, Type, Priority, {Module, Function, Arity}) ->
+    case ets:lookup(?TABLE, Name) of
+        [] ->
+            error({missing_declare, Name});
+        [{Name, Type, Arity, ListOfHook}] ->
+            Hook = {Priority, {Module, Function, Arity}},
+            case lists:member(Hook, ListOfHook) of
+                true ->
+                    case lists:delete(Hook, ListOfHook) of
+                        [] ->
+                            true = ets:delete(?TABLE, Name),
+                            ok;  
+                        NewListOfHook ->
+                            true = ets:insert(?TABLE, {Name, Type, Arity, NewListOfHook}),
+                            ok
+                    end;
+                false ->
+                    error({missing_hook, Hook})
+            end
+    end.
 
--spec call0([{priority(), module(), function(), arity()}], value(), args()) -> {ok, value()} | no_return().
-call0([], Value, _Args) ->
-  {ok, Value};
-call0([{_, Module, Function, Arity}|Rest], Value, Args) ->
-  try
-    case apply(Module, Function, [Value|Args]) of
-      {next, NewValue} ->
-        call0(Rest, NewValue, Args);
-      {stop, NewValue} ->
-        {ok, NewValue}
-    end
-  catch
-    _Class:Reason ->
-      %% apply に失敗
-      error({invalid_apply, Module, Function, Arity, Value, Args, Reason})
-  end.
-  
--spec call(id(), args()) -> ok | {ok, term()} | no_return().
-call(Id, Args) when is_list(Args) ->
-  case ets:lookup(?TABLE, Id) of
-    [] ->
-      %% フック が存在しない
-      ok;
-    [{Id, ListOfHook}] ->
-      call0(ListOfHook, Args)
-  end.
+-spec all(atom(), args()) -> [any()].
+all(Name, Args) ->
+    case ets:lookup(?TABLE, Name) of
+        [] ->
+            error({missing_declare, Name});
+        [{Name, all, _Arity, ListOfHook}] ->
+            F = fun({_, {Module, Function, Arity}}) ->
+                    try
+                        apply(Module, Function, Args)
+                    catch
+                      _Class:_Reason ->
+                          %% apply に失敗
+                          error({invalid_apply, {Module, Function, Arity}})
+                    end
+                end,
+            lists:map(F, ListOfHook)
+    end.
 
--spec call0([{priority(), module(), function(), arity()}], args()) -> ok | {ok, value()} | no_return(). 
-call0([], _Args) ->
-  ok;
-call0([{_Priority, Module, Function, Arity}|Rest], Args) ->
-  try
-    case apply(Module, Function, Args) of
-      next ->
-        call0(Rest, Args);
-      {stop, NewValue} ->
-        {ok, NewValue}
-    end
-  catch
-    _Class:Reason ->
-      %% apply に失敗
-      error({invalid_apply, Module, Function, Arity, Args, Reason})
-  end.
+-spec only(atom(), args()) -> not_found | any().
+only(Name, Args) ->
+    case ets:lookup(?TABLE, Name) of
+        [] ->
+            error({missing_declare, Name});
+        [{Name, only, _Arity, ListOfHook}] ->
+            only0(ListOfHook, Args)
+    end.
 
--spec format_error(term()) -> iolist().
-format_error(_Reason) ->
-  "Not implemented".
+only0([], _Args) ->
+    not_found;
+only0([{_Priority, {Module, Function, _Arity} = MFA}|Rest], Args) ->
+    try
+        case apply(Module, Function, Args) of
+            next ->
+                only0(Rest, Args);
+            Value ->
+                Value
+        end
+    catch
+      _Class:_Reason ->
+          %% apply に失敗
+          error({invalid_apply, MFA})
+    end.
+
+-spec every(atom(), value(), args()) -> any().
+every(Name, Value, Args) ->
+    case ets:lookup(?TABLE, Name) of
+        [] ->
+            error({missing_declare, Name});
+        [{_Name, every, _Arity, ListOfHook}] ->
+            every0(Value, Args, ListOfHook)
+    end.
+
+every0(Value, Args, ListOfHook) ->
+    F = fun({_Priority, {Module, Function, _Arity} = MFA}, Acc) ->
+            try
+                 apply(Module, Function, [Acc|Args])       
+            catch
+              _Class:_Reason ->
+                  %% apply に失敗
+                  error({invalid_apply, MFA})
+            end
+        end,
+    lists:foldl(F, Value, ListOfHook).
