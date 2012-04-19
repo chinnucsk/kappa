@@ -6,3 +6,4 @@ branches:
     - develop
 otp_release:
   - R15B01
+  - R15B
