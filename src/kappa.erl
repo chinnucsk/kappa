@@ -96,9 +96,10 @@ verify_add(Id, Priority, Module, Function, Arity, Hook, ListOfHook) ->
                     error({duplicate_priority, Id, Priority, Module, Function, Arity})
             end;
         true ->
-          error({duplicate_function, Id, Priority, Module, Function, Arity})
+            error({duplicate_function, Id, Priority, Module, Function, Arity})
     end.
 
+%% TODO: エラーハンドリングをしっかりする
 -spec delete(id(), priority(), module(), function(), arity()) -> ok | {error, term()}.
 delete(Id, Priority, Module, Function, Arity) ->
     case ets:lookup(?TABLE, Id) of
@@ -121,32 +122,25 @@ delete(Id, Priority, Module, Function, Arity) ->
             end
     end.
 
--spec call(id(), value(), args()) -> ok | {ok, value()} | no_return().
+%% フックが無い場合、突き抜けてしまった場合の判断は出来ない
+-spec call(id(), value(), args()) -> value() | no_return().
 call(Id, Value, Args) ->
     case ets:lookup(?TABLE, Id) of
         [] ->
-            %% フックが存在しない場合は ok を返す
-            ok;
+            Value;
         [{Id, ListOfHook}] ->
-            case call0(ListOfHook, Value, Args) of
-                {ok, Value} ->
-                    %% 入れたのと同一のデータの場合は ok のみ返す
-                    ok;
-                {ok, NewValue} ->
-                    {ok, NewValue}
-            end
+            call0(ListOfHook, Value, Args)
     end.
 
--spec call0([{priority(), module(), function(), arity()}], value(), args()) -> {ok, value()} | no_return().
 call0([], Value, _Args) ->
-    {ok, Value};
+    Value;
 call0([{_, Module, Function, Arity}|Rest], Value, Args) ->
     try
         case apply(Module, Function, [Value|Args]) of
             {next, NewValue} ->
                 call0(Rest, NewValue, Args);
             {stop, NewValue} ->
-                {ok, NewValue}
+                NewValue
         end
     catch
       _Class:Reason ->
@@ -154,7 +148,8 @@ call0([{_, Module, Function, Arity}|Rest], Value, Args) ->
           error({invalid_apply, Module, Function, Arity, Value, Args, Reason})
     end.
   
--spec call(id(), args()) -> ok | {ok, term()} | no_return().
+%% フックが存在しないのと突き抜けた場合は一緒
+-spec call(id(), args()) -> ok | no_return().
 call(Id, Args) when is_list(Args) ->
     case ets:lookup(?TABLE, Id) of
         [] ->
@@ -164,7 +159,6 @@ call(Id, Args) when is_list(Args) ->
             call0(ListOfHook, Args)
     end.
 
--spec call0([{priority(), module(), function(), arity()}], args()) -> ok | {ok, value()} | no_return(). 
 call0([], _Args) ->
     ok;
 call0([{_Priority, Module, Function, Arity}|Rest], Args) ->
@@ -173,7 +167,7 @@ call0([{_Priority, Module, Function, Arity}|Rest], Args) ->
             next ->
                 call0(Rest, Args);
             {stop, NewValue} ->
-                {ok, NewValue}
+                NewValue
         end
     catch
       _Class:Reason ->
@@ -182,5 +176,5 @@ call0([{_Priority, Module, Function, Arity}|Rest], Args) ->
     end.
 
 -spec format_error(term()) -> iolist().
-format_error(_Reason) ->
+format_error({?MODULE, _Reason}) ->
     "Not implemented".

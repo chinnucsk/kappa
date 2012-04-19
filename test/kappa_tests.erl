@@ -14,69 +14,69 @@
 -include_lib("eunit/include/eunit.hrl").
 
 function1(Value, X) ->
-  {stop, Value + X}.
+    {stop, {ok, Value + X}}.
 
 function2(Value, X) ->
-  {stop, Value - X}.
+    {stop, {ok, Value - X}}.
 
 function2(Value, X, Y) ->
-  {stop, Value, X, Y}.
+    {stop, {ok, Value, X, Y}}.
 
 function3(Value, X) ->
-  {next, Value + X}.
+    {next, Value + X}.
 
 function4(_X) ->
-  next.
+    next.
 
 function5(X) ->
-  {stop, X + 10}.
+    {stop, {ok, X + 10}}.
 
 function6(_X) ->
-  ok.
+    ok.
 
 function7(_Value, _X) ->
-  ok.
+    ok.
 
 add_test_() ->
-  [
-    {"start",
-      ?_assertEqual(ok,
-                    start())},
-    {"start",
-      ?_assertEqual({error, {already_started, kappa}},
-                    start())},
-    {"add",
-      ?_assertEqual(ok,
-                    add(id, 10, ?MODULE, function1, 2))},
+    [
+        {"start",
+         ?_assertEqual(ok,
+                       start())},
+        {"start",
+         ?_assertEqual({error, {already_started, kappa}},
+                       start())},
+        {"add",
+         ?_assertEqual(ok,
+                       add(id, 10, ?MODULE, function1, 2))},
 
-    {"error undefine function",
-      ?_assertError({undef_function, ?MODULE, function3, 3},
-                    add(id, 10, ?MODULE, function3, 3))},
+        {"error undefine function",
+         ?_assertError({undef_function, ?MODULE, function3, 3},
+                       add(id, 10, ?MODULE, function3, 3))},
 
-    {"error undefine module",
-      ?_assertError({undef_module, dummy},
-                    add(id, 10, dummy, function1, 2))},
+        {"error undefine module",
+            ?_assertError({undef_module, dummy},
+                       add(id, 10, dummy, function1, 2))},
 
-    {"error duplicate function",
-      ?_assertError({duplicate_function, id, 10, ?MODULE, function1, 2},
-                    add(id, 10, ?MODULE, function1, 2))},
+        {"error duplicate function",
+            ?_assertError({duplicate_function, id, 10, ?MODULE, function1, 2},
+                       add(id, 10, ?MODULE, function1, 2))},
 
-    {"error duplicate priority",
-      ?_assertError({duplicate_priority, id, 10, ?MODULE, function2, 2},
-                    add(id, 10, ?MODULE, function2, 2))},
+        {"error duplicate priority",
+            ?_assertError({duplicate_priority, id, 10, ?MODULE, function2, 2},
+                       add(id, 10, ?MODULE, function2, 2))},
 
-    {"error invalid_arity",
-      ?_assertError({invalid_arity, id, 30, ?MODULE, function2, 3},
-                    add(id, 30, ?MODULE, function2, 3))},
+        {"error invalid_arity",
+            ?_assertError({invalid_arity, id, 30, ?MODULE, function2, 3},
+                       add(id, 30, ?MODULE, function2, 3))},
 
-    {"add",
-      ?_assertEqual(ok,
-                    add(id, 20, ?MODULE, function2, 2))},
+        {"add",
+         ?_assertEqual(ok,
+                       add(id, 20, ?MODULE, function2, 2))},
 
-    {"stop",
-      ?_assertEqual(ok,
-                    stop())}
-  ].
+        {"stop",
+         ?_assertEqual(ok,
+                       stop())}
+    ].
 
 delete_test_() ->
   [
@@ -108,16 +108,16 @@ call3_test_() ->
       ?_assertEqual(ok,
                     start())},
     {"no add",
-      ?_assertEqual(ok,
+      ?_assertEqual(0,
                     call(id, 0, [10]))},
     {"add function3/2",
       ?_assertEqual(ok,
                     add(id, 10, ?MODULE, function3, 2))},
     {"add + 0",
-      ?_assertEqual(ok,
+        ?_assertEqual(0,
                     call(id, 0, [0]))},
     {"add + 10",
-      ?_assertEqual({ok, 10},
+      ?_assertEqual(10,
                     call(id, 0, [10]))},
     {"add function1/2",
       ?_assertEqual(ok,
@@ -131,11 +131,11 @@ call3_test_() ->
                     add(error, 10, ?MODULE, function7, 2))},
 
     {"error invalid_apply",
-      ?_assertError({invalid_apply, ?MODULE, function7, 2, 0, [10], {case_clause, ok}},
+        ?_assertError({invalid_apply, ?MODULE, function7, 2, 0, [10], {case_clause, ok}},
                     call(error, 0, [10]))},
 
     {"error invalid_apply",
-      ?_assertError({invalid_apply, ?MODULE, function7, 2, 0, [10, 20], undef},
+        ?_assertError({invalid_apply, ?MODULE, function7, 2, 0, [10, 20], undef},
                     call(error, 0, [10, 20]))},
     {"stop",
       ?_assertEqual(ok,
@@ -168,12 +168,12 @@ call2_test_() ->
                     add(error, 10, ?MODULE, function6, 1))},
 
     {"error invalid_apply",
-      ?_assertError({invalid_apply, ?MODULE, function6, 1, [10], {case_clause, ok}},
-                    call(error, [10]))},
+        ?_assertError({invalid_apply, ?MODULE, function6, 1, [10], {case_clause, ok}},
+                      call(error, [10]))},
 
     {"error invalid_apply",
-      ?_assertError({invalid_apply, ?MODULE, function6, 1, [10, 20], undef},
-                    call(error, [10, 20]))},
+        ?_assertError({invalid_apply, ?MODULE, function6, 1, [10, 20], undef},
+                      call(error, [10, 20]))},
 
     {"stop",
       ?_assertEqual(ok,
