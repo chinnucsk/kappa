@@ -8,12 +8,13 @@
 -export([add/5,
          delete/5]).
 
--export([call/2,
-         call/3]).
-
--export([format_error/1]).
+-export([all/2,
+         only/2,
+         every/3]).
 
 -define(TABLE, kappa_table).
+
+-include_lib("eunit/include/eunit.hrl").
 
 -type id() :: atom().
 -type priority() :: non_neg_integer().
@@ -27,6 +28,12 @@
 %% 登録/削除は register/unregister ってのもありか
 %% 呼び出しは call? apply? fold?
 %% {next, any()} と next; {stop, any()};
+
+%% all, only, every
+%% all はフックポイントに登録してある全ての関数から価を貰って最後に lists:append() して値を戻す
+%% only はフックポイントに登録してある関数を優先順位順に見ていって、途中で止められた関数の値を返す
+%% every は全ての値で共通の値を処理された値を返す、途中で止めることは出来ない
+
 
 -spec start() -> ok | {error, {already_started, kappa}}.
 start() ->
@@ -122,59 +129,65 @@ delete(Id, Priority, Module, Function, Arity) ->
             end
     end.
 
-%% フックが無い場合、突き抜けてしまった場合の判断は出来ない
--spec call(id(), value(), args()) -> value() | no_return().
-call(Id, Value, Args) ->
-    case ets:lookup(?TABLE, Id) of
+-spec all(atom(), args()) -> [any()].
+all(HookName, Args) ->
+    case ets:lookup(?TABLE, HookName) of
         [] ->
-            Value;
-        [{Id, ListOfHook}] ->
-            call0(ListOfHook, Value, Args)
+            not_found;
+        [{HookName, ListOfHook}] ->
+            F = fun({_, Module, Function, Arity}) ->
+                    try
+                        ?debugVal(apply(Module, Function, Args)),
+                        apply(Module, Function, Args)
+                    catch
+                      _Class:_Reason ->
+                          %% apply に失敗
+                          error({invalid_apply, {Module, Function, Arity}})
+                    end
+                end,
+            ?debugVal(lists:map(F, ListOfHook)),
+            lists:map(F, ListOfHook)
     end.
 
-call0([], Value, _Args) ->
-    Value;
-call0([{_, Module, Function, Arity}|Rest], Value, Args) ->
-    try
-        case apply(Module, Function, [Value|Args]) of
-            {next, NewValue} ->
-                call0(Rest, NewValue, Args);
-            {stop, NewValue} ->
-                NewValue
-        end
-    catch
-      _Class:Reason ->
-          %% apply に失敗
-          error({invalid_apply, Module, Function, Arity, Value, Args, Reason})
-    end.
-  
-%% フックが存在しないのと突き抜けた場合は一緒
--spec call(id(), args()) -> ok | no_return().
-call(Id, Args) when is_list(Args) ->
-    case ets:lookup(?TABLE, Id) of
+-spec only(atom(), args()) -> not_found | any().
+only(HookName, Args) ->
+    case ets:lookup(?TABLE, HookName) of
         [] ->
-            %% フック が存在しない
-            ok;
-        [{Id, ListOfHook}] ->
-            call0(ListOfHook, Args)
+            not_found;
+        [{HookName, ListOfHook}] ->
+            only0(ListOfHook, Args)
     end.
 
-call0([], _Args) ->
-    ok;
-call0([{_Priority, Module, Function, Arity}|Rest], Args) ->
+only0([], _Args) ->
+    not_found;
+only0([{_, Module, Function, Arity}|Rest], Args) ->
     try
         case apply(Module, Function, Args) of
             next ->
-                call0(Rest, Args);
-            {stop, NewValue} ->
-                NewValue
+                only0(Rest, Args);
+            Value ->
+                Value
         end
     catch
-      _Class:Reason ->
-        %% apply に失敗
-        error({invalid_apply, Module, Function, Arity, Args, Reason})
+      _Class:_Reason ->
+          %% apply に失敗
+          error({invalid_apply, {Module, Function, Arity}})
     end.
 
--spec format_error(term()) -> iolist().
-format_error({?MODULE, _Reason}) ->
-    "Not implemented".
+-spec every(atom(), value(), args()) -> any().
+every(HookName, Value, Args) ->
+    case ets:lookup(?TABLE, HookName) of
+        [] ->
+            not_found;
+        [{HookName, ListOfHook}] ->
+            F = fun({_, Module, Function, Arity}, Acc) ->
+                    try
+                         apply(Module, Function, [Acc|Args])       
+                    catch
+                      _Class:_Reason ->
+                          %% apply に失敗、これだけ Value が付いてくる
+                          error({invalid_apply, {Module, Function, Arity}})
+                    end
+                end,
+            lists:foldl(F, Value, ListOfHook)
+    end.
