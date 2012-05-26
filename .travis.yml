@@ -1,6 +1,6 @@
 language: erlang
 notifications:
-  email: false
+  disabled: true
 branches:
   only:
     - develop
