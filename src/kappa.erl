@@ -130,9 +130,9 @@ all(Name, Args) ->
                     try
                         apply(Module, Function, Args)
                     catch
-                      _Class:_Reason ->
+                      _Class:Reason ->
                           %% apply に失敗
-                          error({invalid_apply, {Module, Function, Arity}})
+                          error({invalid_apply, {Module, Function, Arity}, Reason})
                     end
                 end,
             lists:map(F, ListOfHook)
@@ -149,7 +149,7 @@ only(Name, Args) ->
 
 only0([], _Args) ->
     not_found;
-only0([{_Priority, {Module, Function, _Arity} = MFA}|Rest], Args) ->
+only0([{_Priority, {Module, Function, Arity}}|Rest], Args) ->
     try
         case apply(Module, Function, Args) of
             next ->
@@ -158,9 +158,9 @@ only0([{_Priority, {Module, Function, _Arity} = MFA}|Rest], Args) ->
                 Value
         end
     catch
-      _Class:_Reason ->
+      _Class:Reason ->
           %% apply に失敗
-          error({invalid_apply, MFA})
+          error({invalid_apply, {Module, Function, Arity}, Reason})
     end.
 
 -spec every(atom(), value(), args()) -> any().
@@ -177,9 +177,9 @@ every0(Value, Args, ListOfHook) ->
             try
                  apply(Module, Function, [Acc|Args])       
             catch
-              _Class:_Reason ->
+              _Class:Reason ->
                   %% apply に失敗
-                  error({invalid_apply, MFA})
+                  error({invalid_apply, MFA, Reason})
             end
         end,
     lists:foldl(F, Value, ListOfHook).
