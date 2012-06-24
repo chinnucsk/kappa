@@ -2,6 +2,8 @@
 Kappa
 #########################
 
+.. image:: https://secure.travis-ci.org/voluntas/kappa.png?branch=develop
+
 Kappa is "Erlang Hook Application".
 
 ::
